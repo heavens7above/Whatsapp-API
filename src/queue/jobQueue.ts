@@ -76,18 +76,6 @@ export class JobQueue {
                  throw new Error('Daily cap reached');
             }
 
-            // Random Delay before processing (Rate Shaping)
-            // 2-5 seconds delay to mimic human pace between messages
-            const delay = Math.floor(Math.random() * 3000) + 2000;
-            await new Promise(r => setTimeout(r, delay));
-
-            // Behavioral Entropy: "Coffee Break" (Reduced to 0.1% for testing)
-            if (Math.random() < 0.001) {
-                const coffeeBreak = Math.floor(Math.random() * 180000) + 120000; // 2-5 minutes
-                logger.info(`Behavioral Entropy: Taking a coffee break for ${coffeeBreak/1000}s...`);
-                await new Promise(r => setTimeout(r, coffeeBreak));
-            }
-
             return await jobProcessor(job.data);
         }, { 
             connection: this.connection as any,

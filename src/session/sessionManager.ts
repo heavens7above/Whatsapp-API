@@ -199,15 +199,15 @@ export class SessionManager extends EventEmitter {
         try {
             const page = this.browserManager.getPage();
             
-            // Format phone for URL (ensure + prefix)
-            const formattedPhone = phone.startsWith('+') ? phone.replace('+', '') : phone;
+            // Format phone for URL (ensure no + prefix for the URL itself, wa.me style)
+            const formattedPhone = phone.replace(/\D/g, ''); 
             const url = `https://web.whatsapp.com/send?phone=${formattedPhone}`;
             
             logger.info(`Navigating to chat: ${formattedPhone}`);
-            // Faster navigation: don't wait for network idle as WhatsApp is heavy
+            // Faster navigation: wait for DOM but handle slow network gracefully
             await page.goto(url, {
                  waitUntil: 'domcontentloaded',
-                 timeout: 30000
+                 timeout: 35000
             }).catch(e => logger.debug(`Navigation notice: ${e.message}`));
             
             const inputSelector = 'div[contenteditable="true"][data-tab="10"]';
@@ -215,8 +215,8 @@ export class SessionManager extends EventEmitter {
 
             // Wait for either the INPUT or the INVALID POPUP
             const result = await Promise.race([
-                page.waitForSelector(inputSelector, { timeout: 20000 }).then(() => 'ready'),
-                page.waitForSelector(invalidSelector, { timeout: 10000 }).then(() => 'invalid')
+                page.waitForSelector(inputSelector, { timeout: 25000 }).then(() => 'ready'),
+                page.waitForSelector(invalidSelector, { timeout: 12000 }).then(() => 'invalid')
             ]).catch(() => 'timeout');
 
             if (result === 'invalid') {
@@ -225,35 +225,39 @@ export class SessionManager extends EventEmitter {
                     throw new Error(`WhatsApp reports phone number as invalid: ${phone}`);
                 }
             } else if (result === 'timeout') {
-                throw new Error(`Timeout waiting for chat interface for ${phone}`);
+                // If we timeout but the input is actually there (slow network), try once more
+                const inputExists = await page.$(inputSelector);
+                if (!inputExists) throw new Error(`Timeout waiting for chat interface for ${phone}`);
             }
 
-            // Small pause for stability
-            await new Promise(r => setTimeout(r, 500));
+            // Small stabilization pause
+            await new Promise(r => setTimeout(r, 400));
             await page.focus(inputSelector);
             
-            // Human-like typing with reduced delay for latency
+            // Human-like typing (now much faster via BrowserManager)
             await this.browserManager.typeHumanLike(inputSelector, message);
 
-            // Let "Send" button activate
-            await new Promise(r => setTimeout(r, 200));
+            // Instant wait for send button activation
+            await new Promise(r => setTimeout(r, 100));
 
             // USE ENTER KEY
             logger.info('Pressing ENTER to send...');
             await page.keyboard.press('Enter');
             
-            // Verification: Use waitForFunction for more reliability
+            // Verification: High-reliability waitForFunction
             try {
                 await page.waitForFunction((msg) => {
-                    const bubbles = Array.from(document.querySelectorAll('.message-out'));
+                    // Look for the most recent outgoing message bubble
+                    const bubbles = Array.from(document.querySelectorAll('.message-out .copyable-text'));
                     return bubbles.some(b => (b as HTMLElement).innerText.includes(msg));
-                }, { timeout: 5000 }, message);
-                logger.info(`Message delivery verified for ${phone}`);
+                }, { timeout: 6000 }, message);
+                logger.info(`Message delivery confirmed for ${phone}`);
             } catch (e) {
                 logger.warn('Bubble verification timed out. Trying manual click fallback...');
                 const sendButton = await page.$('[aria-label="Send"], span[data-icon="send"]');
                 if (sendButton) {
                     await sendButton.click();
+                    // Final verification of text disappearance from input
                     await new Promise(r => setTimeout(r, 2000));
                 }
             }

@@ -196,10 +196,12 @@ export class BrowserManager extends EventEmitter {
     if (!this.page) return;
     await this.page.focus(selector);
     for (const char of text) {
-      await this.page.keyboard.type(char, { delay: Math.random() * 100 + 30 }); // 30-130ms delay
-      // Random pause
-      if (Math.random() < 0.05) {
-        await new Promise((r) => setTimeout(r, Math.random() * 500 + 200));
+      // Faster typing for production (5-25ms per char)
+      await this.page.keyboard.type(char, { delay: Math.random() * 20 + 5 }); 
+      
+      // Much rarer random pause
+      if (Math.random() < 0.02) {
+        await new Promise((r) => setTimeout(r, Math.random() * 200 + 100));
       }
     }
   }
