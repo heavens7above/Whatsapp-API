@@ -4,8 +4,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const BASE_URL = process.argv[2] || 'https://whatsapp-api-production-974f.up.railway.app';
-const API_KEY = process.env.API_KEY;
-const ADMIN_KEY = process.env.ADMIN_KEY;
+const { API_KEY, ADMIN_KEY } = process.env;
 
 async function getQRCode() {
     if (!API_KEY || !ADMIN_KEY) {
