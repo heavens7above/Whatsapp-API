@@ -14,11 +14,14 @@ export class BrowserManager extends EventEmitter {
   private browser: Browser | null = null;
   private page: Page | null = null;
   private isClosing = false;
-  private userDataDir = process.env.CHROME_USER_DATA_DIR || "/app/chrome-data";
+  private userDataDir: string;
   private lockFilePath: string;
 
   constructor() {
     super();
+    // Resolve absolute path to avoid ambiguity (especially on Railway/Docker)
+    const rawDir = process.env.CHROME_USER_DATA_DIR || "chrome-data";
+    this.userDataDir = path.isAbsolute(rawDir) ? rawDir : path.resolve(process.cwd(), rawDir);
     this.lockFilePath = path.join(this.userDataDir, ".browser.lock");
     this.startMemoryWatchdog();
   }
@@ -26,9 +29,23 @@ export class BrowserManager extends EventEmitter {
   async init(): Promise<void> {
     if (this.browser) return;
 
-    // Ensure userDataDir exists
-    if (!fs.existsSync(this.userDataDir)) {
-      fs.mkdirSync(this.userDataDir, { recursive: true });
+    // Ensure userDataDir exists with better error handling
+    try {
+      if (!fs.existsSync(this.userDataDir)) {
+        logger.info(`Creating user data directory: ${this.userDataDir}`);
+        fs.mkdirSync(this.userDataDir, { recursive: true });
+      }
+    } catch (error: any) {
+      if (error.code === 'EACCES') {
+        logger.warn(`Permission denied on ${this.userDataDir}. Falling back to /tmp/chrome-data for this session.`);
+        this.userDataDir = path.resolve("/tmp/chrome-data");
+        this.lockFilePath = path.join(this.userDataDir, ".browser.lock");
+        if (!fs.existsSync(this.userDataDir)) {
+          fs.mkdirSync(this.userDataDir, { recursive: true });
+        }
+      } else {
+        throw error;
+      }
     }
 
     // Check and cleanup stale lock
