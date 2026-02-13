@@ -198,70 +198,70 @@ export class SessionManager extends EventEmitter {
         this.isSending = true;
         try {
             const page = this.browserManager.getPage();
-            // Stealth Navigation
-             await page.goto(`https://web.whatsapp.com/send?phone=${phone}`, {
-                 waitUntil: 'networkidle2'
+            
+            // Format phone for URL (ensure + prefix)
+            const formattedPhone = phone.startsWith('+') ? phone.replace('+', '') : phone;
+            const url = `https://web.whatsapp.com/send?phone=${formattedPhone}`;
+            
+            logger.info(`Navigating to chat: ${formattedPhone}`);
+            await page.goto(url, {
+                 waitUntil: 'networkidle2',
+                 timeout: 45000
             });
             
-            // Check for "Phone number shared via url is invalid"
+            // Wait for input to be ready
+            const inputSelector = 'div[contenteditable="true"][data-tab="10"]';
+            
+            // Multiple validation steps to ensure we are actually in the chat
             try {
+                // 1. Check for invalid number popup
                 const invalidSelector = 'div[data-animate-modal-popup="true"]';
-                const isInvalid = await page.$(invalidSelector);
+                const isInvalid = await page.waitForSelector(invalidSelector, { timeout: 8000 }).catch(() => null);
                 if (isInvalid) {
                     const text = await page.evaluate((sel: string) => (document.querySelector(sel) as any)?.innerText, invalidSelector);
-                    if (text?.includes('invalid')) {
-                        throw new Error(`Invalid phone number: ${phone}`);
+                    if (text?.toLowerCase().includes('invalid') || text?.toLowerCase().includes('incorrect')) {
+                        throw new Error(`WhatsApp reports phone number as invalid: ${phone}`);
                     }
                 }
             } catch (e: any) {
-                if (e.message.includes('Invalid phone number')) throw e;
+                if (e.message.includes('invalid')) throw e;
             }
 
-            const inputSelector = 'div[contenteditable="true"][data-tab="10"]';
-            await page.waitForSelector(inputSelector, { timeout: 20000 });
+            // 2. Wait for the actual message input
+            await page.waitForSelector(inputSelector, { timeout: 30000 });
+            await page.focus(inputSelector);
             
-            // Human-like typing using BrowserManager helper
+            // Random pause for realism
+            await new Promise(r => setTimeout(r, 1000 + Math.random() * 1000));
+            
+            // Human-like typing
             await this.browserManager.typeHumanLike(inputSelector, message);
 
-            // Random pause before send
-            await new Promise(r => setTimeout(r, Math.random() * 500 + 400));
+            // Extra pause to let the "Send" button activate
+            await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
 
-            // Robust Send Logic: Try button first, then Enter fallback
-            try {
-                // Multiple possible selectors for the send button
-                const sendSelectors = [
-                    'span[data-icon="send"]',
-                    'button span[data-icon="send"]',
-                    '[aria-label="Send"]',
-                    'footer button'
-                ];
-                
-                let sendButton = null;
-                for (const selector of sendSelectors) {
-                    sendButton = await page.$(selector);
-                    if (sendButton) {
-                        await sendButton.click();
-                        logger.info(`Message sent using selector: ${selector}`);
-                        break;
-                    }
-                }
-
-                if (!sendButton) {
-                    logger.warn('Send button not found visually, falling back to Enter key press');
-                    await page.focus(inputSelector);
-                    await page.keyboard.press('Enter');
-                }
-            } catch (clickError: any) {
-                logger.warn(`Failed to click send button: ${clickError.message}. Trying Enter fallback.`);
-                await page.focus(inputSelector);
-                await page.keyboard.press('Enter');
-            }
+            // USE ENTER KEY - Universal and more robust than button selectors
+            logger.info('Pressing ENTER to send...');
+            await page.keyboard.press('Enter');
             
-            // Verify send (wait for the text to appear or button to disappear)
-            await new Promise(r => setTimeout(r, 3000));
+            // Verification: Wait for the message bubble to actually appear in the page
+            // We look for a selectable div containing our message text
+            await new Promise(r => setTimeout(r, 2000));
+            
+            const messageSent = await page.evaluate((msg) => {
+                const bubbles = Array.from(document.querySelectorAll('.message-out'));
+                return bubbles.some(b => (b as HTMLElement).innerText.includes(msg));
+            }, message);
+
+            if (!messageSent) {
+                logger.warn('Message bubble not detected after Enter. Trying visual click fallback...');
+                const sendButton = await page.$('span[data-icon="send"]');
+                if (sendButton) await sendButton.click();
+                await new Promise(r => setTimeout(r, 3000));
+            }
 
             this.failureCount = 0; 
-            logger.info(`Message process completed for ${phone}`);
+            logger.info(`Message delivery sequence finished for ${phone}`);
             return true;
         } catch (error) {
             logger.error(`Failed to send message to ${phone}`, error);
