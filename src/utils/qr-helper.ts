@@ -31,39 +31,51 @@ async function getQRCode() {
         process.exit(1);
     }
 
-    try {
-        console.log(`Connecting to ${BASE_URL}...`);
-        
-        // 1. Generate Token with HMAC Signature
-        const body = {};
-        const { signature, timestamp } = signRequest(body, API_SECRET);
+    const MAX_ATTEMPTS = 5;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+            console.log(`Connecting to ${BASE_URL} (Attempt ${attempt}/${MAX_ATTEMPTS})...`);
+            
+            // 1. Generate Token with HMAC Signature
+            const body = {};
+            const { signature, timestamp } = signRequest(body, API_SECRET);
 
-        const tokenResponse = await axios.post(`${BASE_URL}/admin/generate-qr-token`, body, {
-            headers: {
-                'x-api-key': API_KEY,
-                'x-admin-key': ADMIN_KEY,
-                'x-signature': signature,
-                'x-timestamp': timestamp
+            const tokenResponse = await axios.post(`${BASE_URL}/admin/generate-qr-token`, body, {
+                headers: {
+                    'x-api-key': API_KEY,
+                    'x-admin-key': ADMIN_KEY,
+                    'x-signature': signature,
+                    'x-timestamp': timestamp
+                }
+            });
+
+            const { qrAccessToken } = tokenResponse.data;
+            console.log('Token generated safely. Fetching QR code data...');
+
+            // 2. Fetch QR
+            const qrResponse = await axios.get(`${BASE_URL}/qr?token=${qrAccessToken}`);
+            const { qr } = qrResponse.data;
+
+            if (qr) {
+                console.log('\nScan this code with your WhatsApp app:\n');
+                qrcode.generate(qr, { small: true });
+                return;
             }
-        });
 
-        const { qrAccessToken } = tokenResponse.data;
-        console.log('Token generated safely. Fetching QR code data...');
-
-        // 2. Fetch QR
-        const qrResponse = await axios.get(`${BASE_URL}/qr?token=${qrAccessToken}`);
-        const { qr } = qrResponse.data;
-
-        if (!qr) {
-            console.log('No QR code available. Is the session already active?');
-            return;
+            console.log('No QR code available to share yet. The browser might still be loading WhatsApp Web.');
+        } catch (error: any) {
+            const errorMsg = error.response?.data?.error || error.response?.data || error.message;
+            console.error(`Attempt ${attempt} failed:`, errorMsg);
+            
+            if (attempt === MAX_ATTEMPTS) {
+                console.error('Max attempts reached. Please check the Railway logs for browser status.');
+            }
         }
-
-        console.log('\nScan this code with your WhatsApp app:\n');
-        qrcode.generate(qr, { small: true });
-
-    } catch (error: any) {
-        console.error('Failed to get QR code:', error.response?.data || error.message);
+        
+        if (attempt < MAX_ATTEMPTS) {
+            console.log('Waiting 10 seconds before next attempt...');
+            await new Promise(resolve => setTimeout(resolve, 10000));
+        }
     }
 }
 

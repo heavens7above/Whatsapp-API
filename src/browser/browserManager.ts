@@ -21,7 +21,10 @@ export class BrowserManager extends EventEmitter {
     super();
     // Resolve absolute path to avoid ambiguity (especially on Railway/Docker)
     const rawDir = process.env.CHROME_USER_DATA_DIR || "chrome-data";
-    this.userDataDir = path.isAbsolute(rawDir) ? rawDir : path.resolve(process.cwd(), rawDir);
+    const baseDir = path.isAbsolute(rawDir) ? rawDir : path.resolve(process.cwd(), rawDir);
+    
+    // Use a subdirectory for the actual profile to handle root-owned volume mounts better
+    this.userDataDir = path.join(baseDir, "profile");
     this.lockFilePath = path.join(this.userDataDir, ".browser.lock");
     this.startMemoryWatchdog();
   }

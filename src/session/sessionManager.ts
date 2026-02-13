@@ -66,19 +66,31 @@ export class SessionManager extends EventEmitter {
         // ... (checkQR remains same) ...
         const checkQR = async () => {
              try {
-                const qrSelector = 'canvas[aria-label="Scan me!"]';
-                if (await page.$(qrSelector)) {
-                    this.state = SessionState.QR_PENDING;
+                // Check multiple possible selectors for QR
+                const qrCanvas = await page.$('canvas[aria-label="Scan me!"]');
+                const qrContainer = await page.$('div[data-ref]');
+                
+                if (qrCanvas || qrContainer) {
                     const qrData = await page.evaluate(() => {
                         const selector = document.querySelector('div[data-ref]');
                         return selector ? selector.getAttribute('data-ref') : null;
                     });
-                    if (qrData) {
+
+                    if (qrData && qrData !== this.qrCode) {
                         this.qrCode = qrData;
-                        logger.info('QR Code detected (waiting for scan)');
+                        this.state = SessionState.QR_PENDING;
+                        logger.info(`QR Code detected: ${qrData.substring(0, 20)}...`);
+                    }
+                } else if (this.state === SessionState.QR_PENDING) {
+                    // If we were pending but selectors disappeared, check if it's because we authenticated
+                    const isAuthenticated = await page.$('#pane-side');
+                    if (!isAuthenticated) {
+                        logger.debug('QR selectors disappeared but not authenticated yet');
                     }
                 }
-            } catch (e) { /* ignore */ }
+            } catch (e) { 
+                logger.debug('Error checking QR: ' + (e as Error).message);
+            }
         };
 
         // Check for Authentication logic with QUARANTINE BAN DETECTION
@@ -131,7 +143,7 @@ export class SessionManager extends EventEmitter {
             } catch (e) { /* ignore */ }
         };
 
-        setInterval(async () => {
+        const monitorInterval = setInterval(async () => {
             if (this.state === SessionState.BANNED || this.state === SessionState.SUSPECTED_BAN) return;
 
             // Circuit Breaker logic
@@ -155,7 +167,7 @@ export class SessionManager extends EventEmitter {
                 await checkQR();
                 await checkAuth();
             }
-        }, 5000);
+        }, 3000); // Increased frequency to 3s for faster QR capture
     }
 
     // Accessor for QR Code (Internal use only, masked in API)
