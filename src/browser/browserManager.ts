@@ -59,7 +59,7 @@ export class BrowserManager extends EventEmitter {
     );
     
     try {
-      this.browser = (await puppeteer.launch({
+      const launchOptions: any = {
         headless: true,
         args: [
           "--no-sandbox",
@@ -71,8 +71,26 @@ export class BrowserManager extends EventEmitter {
           "--disable-gpu",
           `--user-data-dir=${this.userDataDir}`,
         ],
-        // executablePath: '/usr/bin/google-chrome-stable' // For Docker
-      })) as unknown as Browser; // Cast because puppeteer-extra types can be tricky
+      };
+
+      // Handle custom executable path (critical for Railway/Docker)
+      const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      if (executablePath) {
+        logger.info(`Using custom browser executable: ${executablePath}`);
+        launchOptions.executablePath = executablePath;
+      } else if (process.platform === "linux") {
+        // Auto-detect common linux paths if not specified
+        const commonPaths = ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium"];
+        for (const p of commonPaths) {
+          if (fs.existsSync(p)) {
+            logger.info(`Auto-detected system browser at: ${p}`);
+            launchOptions.executablePath = p;
+            break;
+          }
+        }
+      }
+
+      this.browser = (await puppeteer.launch(launchOptions)) as unknown as Browser; // Cast because puppeteer-extra types can be tricky
 
       // Write lock file with current process PID
       fs.writeFileSync(this.lockFilePath, process.pid.toString());
