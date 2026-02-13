@@ -69,8 +69,8 @@ export class BrowserManager extends EventEmitter {
           "--no-first-run",
           "--no-zygote",
           "--disable-gpu",
-          `--user-data-dir=${this.userDataDir}`,
         ],
+        userDataDir: this.userDataDir,
       };
 
       // Handle custom executable path (critical for Railway/Docker)
@@ -263,10 +263,10 @@ export class BrowserManager extends EventEmitter {
         const escapedPath = this.userDataDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         try {
           execSync(
-            `pkill -f "chrome.*${escapedPath}" || true`,
+            `pkill -f "chrome" || pkill -f "chromium" || true`,
             { stdio: "ignore" },
           );
-          logger.info("Cleaned up ghost browser processes");
+          logger.info("Cleaned up all ghost browser processes");
         } catch (e) {
           // pkill returns non-zero if no processes found, which is fine
         }
