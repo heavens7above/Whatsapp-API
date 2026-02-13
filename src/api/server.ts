@@ -12,15 +12,17 @@ import crypto from 'crypto';
 export const createServer = (sessionManager: SessionManager, jobQueue: JobQueue) => {
     const app = express();
 
-    // Security Middleware
+    // Trust proxy for Railway/production (CRITICAL for rate limiting)
+    // We set this to true to trust all proxies in the hops, common for Railway/Docker
+    if (process.env.NODE_ENV === 'production') {
+        logger.info('Production mode detected: Enabling trust proxy');
+        app.set('trust proxy', true);
+    }
+
+    // Security & Parsing Middleware
     app.use(helmet());
     app.use(cors());
     app.use(express.json());
-
-    // Trust proxy for Railway/production (needed for rate limiting)
-    if (process.env.NODE_ENV === 'production') {
-        app.set('trust proxy', 1);
-    }
 
     // Rate Limiting
     const limiter = rateLimit({
@@ -62,9 +64,16 @@ export const createServer = (sessionManager: SessionManager, jobQueue: JobQueue)
              return res.status(429).json({ error: 'Too many QR generation attempts. Try again in an hour.' });
         }
 
-        const qrCode = sessionManager.getQC();
+        // Simple polling/wait for QR if browser just started
+        let qrCode = sessionManager.getQC();
         if (!qrCode) {
-            return res.status(404).json({ error: 'No QR code available to share' });
+            logger.info('QR not immediately available, waiting 5s...');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            qrCode = sessionManager.getQC();
+        }
+
+        if (!qrCode) {
+            return res.status(404).json({ error: 'No QR code available to share. Ensure the browser is at the login screen.' });
         }
 
         // Generate short-lived token
