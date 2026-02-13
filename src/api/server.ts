@@ -15,8 +15,10 @@ export const createServer = (sessionManager: SessionManager, jobQueue: JobQueue)
     // Trust proxy for Railway/production (CRITICAL for rate limiting)
     const isProduction = process.env.NODE_ENV?.toLowerCase() === 'production' || !!process.env.RAILWAY_STATIC_URL;
     if (isProduction) {
-        logger.info('Production/Railway environment detected: Enabling trust proxy');
-        app.set('trust proxy', true);
+        logger.info('Production/Railway environment detected: Enabling trust proxy (1 hop)');
+        // Trust exactly 1 hop (the Railway proxy). 
+        // This is more secure than 'true' and satisfies express-rate-limit validations.
+        app.set('trust proxy', 1);
     }
     
     // Log verification for debugging
@@ -32,7 +34,10 @@ export const createServer = (sessionManager: SessionManager, jobQueue: JobQueue)
         windowMs: 15 * 60 * 1000, 
         max: 500, // Increased for admin access
         message: 'Too many requests, please try again later.',
-        validate: { xForwardedForHeader: false } // Disable strict check to prevent crash if proxy headers vary
+        validate: { 
+            trustProxy: false, // Silence the permissive trust proxy warning
+            xForwardedForHeader: false 
+        }
     });
     app.use(limiter);
 
