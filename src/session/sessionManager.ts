@@ -224,17 +224,44 @@ export class SessionManager extends EventEmitter {
             await this.browserManager.typeHumanLike(inputSelector, message);
 
             // Random pause before send
-            await new Promise(r => setTimeout(r, Math.random() * 500 + 300));
+            await new Promise(r => setTimeout(r, Math.random() * 500 + 400));
 
-            // Click send
-            const sendButtonSelector = 'span[data-icon="send"]';
-            await page.click(sendButtonSelector);
+            // Robust Send Logic: Try button first, then Enter fallback
+            try {
+                // Multiple possible selectors for the send button
+                const sendSelectors = [
+                    'span[data-icon="send"]',
+                    'button span[data-icon="send"]',
+                    '[aria-label="Send"]',
+                    'footer button'
+                ];
+                
+                let sendButton = null;
+                for (const selector of sendSelectors) {
+                    sendButton = await page.$(selector);
+                    if (sendButton) {
+                        await sendButton.click();
+                        logger.info(`Message sent using selector: ${selector}`);
+                        break;
+                    }
+                }
+
+                if (!sendButton) {
+                    logger.warn('Send button not found visually, falling back to Enter key press');
+                    await page.focus(inputSelector);
+                    await page.keyboard.press('Enter');
+                }
+            } catch (clickError: any) {
+                logger.warn(`Failed to click send button: ${clickError.message}. Trying Enter fallback.`);
+                await page.focus(inputSelector);
+                await page.keyboard.press('Enter');
+            }
             
-            // Verify send (wait for the text to appear in chat or button to disappear)
-            await new Promise(r => setTimeout(r, 2000));
+            // Verify send (wait for the text to appear or button to disappear)
+            await new Promise(r => setTimeout(r, 3000));
 
             this.failureCount = 0; 
-            logger.info(`Message successfully sent to ${phone}`);
+            logger.info(`Message process completed for ${phone}`);
             return true;
         } catch (error) {
             logger.error(`Failed to send message to ${phone}`, error);
