@@ -46,9 +46,14 @@ export class BrowserManager extends EventEmitter {
       logger.info(`Verified write access to: ${this.userDataDir}`);
       
     } catch (error: any) {
-      if (error.code === 'EACCES') {
-        const stats = fs.statSync(path.dirname(this.userDataDir));
-        logger.warn(`Permission denied on ${this.userDataDir}. Parent owner UID: ${stats.uid}. Falling back to /tmp/chrome-data.`);
+      if (error.code === 'EACCES' || error.code === 'ENOENT') {
+        let parentOwner = "unknown";
+        try {
+          const stats = fs.statSync(path.dirname(this.userDataDir));
+          parentOwner = `UID:${stats.uid}`;
+        } catch (e) { /* ignore */ }
+        
+        logger.warn(`Path issue on ${this.userDataDir} (${error.code}). Parent owner: ${parentOwner}. Falling back to /tmp/chrome-data.`);
         this.userDataDir = path.resolve("/tmp/chrome-data");
         this.lockFilePath = path.join(this.userDataDir, ".browser.lock");
         if (!fs.existsSync(this.userDataDir)) {
