@@ -204,69 +204,66 @@ export class SessionManager extends EventEmitter {
             const url = `https://web.whatsapp.com/send?phone=${formattedPhone}`;
             
             logger.info(`Navigating to chat: ${formattedPhone}`);
+            // Faster navigation: don't wait for network idle as WhatsApp is heavy
             await page.goto(url, {
-                 waitUntil: 'networkidle2',
-                 timeout: 45000
-            });
+                 waitUntil: 'domcontentloaded',
+                 timeout: 30000
+            }).catch(e => logger.debug(`Navigation notice: ${e.message}`));
             
-            // Wait for input to be ready
             const inputSelector = 'div[contenteditable="true"][data-tab="10"]';
-            
-            // Multiple validation steps to ensure we are actually in the chat
-            try {
-                // 1. Check for invalid number popup
-                const invalidSelector = 'div[data-animate-modal-popup="true"]';
-                const isInvalid = await page.waitForSelector(invalidSelector, { timeout: 8000 }).catch(() => null);
-                if (isInvalid) {
-                    const text = await page.evaluate((sel: string) => (document.querySelector(sel) as any)?.innerText, invalidSelector);
-                    if (text?.toLowerCase().includes('invalid') || text?.toLowerCase().includes('incorrect')) {
-                        throw new Error(`WhatsApp reports phone number as invalid: ${phone}`);
-                    }
+            const invalidSelector = 'div[data-animate-modal-popup="true"]';
+
+            // Wait for either the INPUT or the INVALID POPUP
+            const result = await Promise.race([
+                page.waitForSelector(inputSelector, { timeout: 20000 }).then(() => 'ready'),
+                page.waitForSelector(invalidSelector, { timeout: 10000 }).then(() => 'invalid')
+            ]).catch(() => 'timeout');
+
+            if (result === 'invalid') {
+                const text = await page.evaluate((sel: string) => (document.querySelector(sel) as any)?.innerText, invalidSelector);
+                if (text?.toLowerCase().includes('invalid') || text?.toLowerCase().includes('incorrect')) {
+                    throw new Error(`WhatsApp reports phone number as invalid: ${phone}`);
                 }
-            } catch (e: any) {
-                if (e.message.includes('invalid')) throw e;
+            } else if (result === 'timeout') {
+                throw new Error(`Timeout waiting for chat interface for ${phone}`);
             }
 
-            // 2. Wait for the actual message input
-            await page.waitForSelector(inputSelector, { timeout: 30000 });
+            // Small pause for stability
+            await new Promise(r => setTimeout(r, 500));
             await page.focus(inputSelector);
             
-            // Random pause for realism
-            await new Promise(r => setTimeout(r, 1000 + Math.random() * 1000));
-            
-            // Human-like typing
+            // Human-like typing with reduced delay for latency
             await this.browserManager.typeHumanLike(inputSelector, message);
 
-            // Extra pause to let the "Send" button activate
-            await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
+            // Let "Send" button activate
+            await new Promise(r => setTimeout(r, 200));
 
-            // USE ENTER KEY - Universal and more robust than button selectors
+            // USE ENTER KEY
             logger.info('Pressing ENTER to send...');
             await page.keyboard.press('Enter');
             
-            // Verification: Wait for the message bubble to actually appear in the page
-            // We look for a selectable div containing our message text
-            await new Promise(r => setTimeout(r, 2000));
-            
-            const messageSent = await page.evaluate((msg) => {
-                const bubbles = Array.from(document.querySelectorAll('.message-out'));
-                return bubbles.some(b => (b as HTMLElement).innerText.includes(msg));
-            }, message);
-
-            if (!messageSent) {
-                logger.warn('Message bubble not detected after Enter. Trying visual click fallback...');
-                const sendButton = await page.$('span[data-icon="send"]');
-                if (sendButton) await sendButton.click();
-                await new Promise(r => setTimeout(r, 3000));
+            // Verification: Use waitForFunction for more reliability
+            try {
+                await page.waitForFunction((msg) => {
+                    const bubbles = Array.from(document.querySelectorAll('.message-out'));
+                    return bubbles.some(b => (b as HTMLElement).innerText.includes(msg));
+                }, { timeout: 5000 }, message);
+                logger.info(`Message delivery verified for ${phone}`);
+            } catch (e) {
+                logger.warn('Bubble verification timed out. Trying manual click fallback...');
+                const sendButton = await page.$('[aria-label="Send"], span[data-icon="send"]');
+                if (sendButton) {
+                    await sendButton.click();
+                    await new Promise(r => setTimeout(r, 2000));
+                }
             }
 
             this.failureCount = 0; 
-            logger.info(`Message delivery sequence finished for ${phone}`);
             return true;
         } catch (error) {
             logger.error(`Failed to send message to ${phone}`, error);
             this.handleFailure();
-            throw error; // Throw so BullMQ can handle retries
+            throw error; 
         } finally {
             this.isSending = false;
         }
