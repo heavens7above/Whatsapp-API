@@ -17,6 +17,11 @@ export const createServer = (sessionManager: SessionManager, jobQueue: JobQueue)
     app.use(cors());
     app.use(express.json());
 
+    // Trust proxy for Railway/production (needed for rate limiting)
+    if (process.env.NODE_ENV === 'production') {
+        app.set('trust proxy', 1);
+    }
+
     // Rate Limiting
     const limiter = rateLimit({
         windowMs: 15 * 60 * 1000, // 15 minutes
