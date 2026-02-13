@@ -26,4 +26,5 @@ echo "Permissions fixed. Switching to pptruser..."
 
 # Execute the main command as pptruser
 # Using 'exec' to ensure signals (like SIGTERM) reach the node process
-exec gosu pptruser npm start
+# We use node directly to save memory overhead of npm
+exec gosu pptruser node dist/index.js

@@ -86,6 +86,9 @@ export class BrowserManager extends EventEmitter {
           "--no-first-run",
           "--no-zygote",
           "--disable-gpu",
+          "--disable-extensions",
+          "--disable-default-apps",
+          "--js-flags='--max-old-space-size=256'", // Limit JS heap in Chrome
         ],
         userDataDir: this.userDataDir,
       };
@@ -205,15 +208,17 @@ export class BrowserManager extends EventEmitter {
   private startMemoryWatchdog() {
     setInterval(async () => {
       if (this.isClosing) return;
-      const used = process.memoryUsage().rss / 1024 / 1024;
-      if (used > 900) {
-        // 900MB Threshold
+      const rss = process.memoryUsage().rss / 1024 / 1024;
+      const heapUsed = process.memoryUsage().heapUsed / 1024 / 1024;
+      
+      // Proactive threshold for 512MB Railway containers
+      if (rss > 400) {
         logger.warn(
-          `Memory usage high (${Math.round(used)}MB). triggering safe restart...`,
+          `Memory usage critical (RSS: ${Math.round(rss)}MB, Heap: ${Math.round(heapUsed)}MB). Triggering safe restart...`,
         );
         this.emit("restart_required");
       }
-    }, 60000); // Check every minute
+    }, 30000); // Check every 30s for faster response in constrained env
   }
 
   // Called by coordinator (index.ts) after pausing queue
@@ -241,11 +246,16 @@ export class BrowserManager extends EventEmitter {
         return;
       }
 
+      if (pid === process.pid) {
+        logger.info("Lock file belongs to current process, keeping it.");
+        return;
+      }
+
       // Check if process is still running
       try {
         process.kill(pid, 0); // Signal 0 checks if process exists
         logger.warn(
-          `Browser lock exists for PID ${pid}. Attempting cleanup...`,
+          `Stale browser lock exists for PID ${pid}. Sending SIGTERM...`,
         );
         // Process exists, try to kill it
         try {
