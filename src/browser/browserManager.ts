@@ -39,14 +39,16 @@ export class BrowserManager extends EventEmitter {
         fs.mkdirSync(this.userDataDir, { recursive: true });
       }
       
-      // Critical check: Verify we have write permissions by trying to create a test file
+      // Critical check: Verify we have write permissions
       const testFile = path.join(this.userDataDir, ".write-test");
       fs.writeFileSync(testFile, Date.now().toString());
       fs.unlinkSync(testFile);
+      logger.info(`Verified write access to: ${this.userDataDir}`);
       
     } catch (error: any) {
       if (error.code === 'EACCES') {
-        logger.warn(`Permission denied on ${this.userDataDir} (Volume mount issue?). Falling back to /tmp/chrome-data.`);
+        const stats = fs.statSync(path.dirname(this.userDataDir));
+        logger.warn(`Permission denied on ${this.userDataDir}. Parent owner UID: ${stats.uid}. Falling back to /tmp/chrome-data.`);
         this.userDataDir = path.resolve("/tmp/chrome-data");
         this.lockFilePath = path.join(this.userDataDir, ".browser.lock");
         if (!fs.existsSync(this.userDataDir)) {
