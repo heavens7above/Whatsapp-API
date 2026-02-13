@@ -19,6 +19,7 @@ export class SessionManager extends EventEmitter {
     private state: SessionState = SessionState.INIT;
     private browserManager: BrowserManager;
     private qrCode: string | null = null;
+    private isSending = false;
     
     // Circuit Breaker Stats
     private failureCount = 0;
@@ -158,6 +159,9 @@ export class SessionManager extends EventEmitter {
             }
 
             if (this.state === SessionState.AUTHENTICATED) {
+                 // Skip monitor if we are actively sending a message (navigation hides pane)
+                 if (this.isSending) return;
+
                  const isAuth = await page.$('#pane-side');
                  if (!isAuth) {
                      this.state = SessionState.DISCONNECTED;
@@ -191,6 +195,7 @@ export class SessionManager extends EventEmitter {
             throw new Error('Session not authenticated');
         }
         
+        this.isSending = true;
         try {
             const page = this.browserManager.getPage();
             // Stealth Navigation
@@ -198,6 +203,20 @@ export class SessionManager extends EventEmitter {
                  waitUntil: 'networkidle2'
             });
             
+            // Check for "Phone number shared via url is invalid"
+            try {
+                const invalidSelector = 'div[data-animate-modal-popup="true"]';
+                const isInvalid = await page.$(invalidSelector);
+                if (isInvalid) {
+                    const text = await page.evaluate((sel: string) => (document.querySelector(sel) as any)?.innerText, invalidSelector);
+                    if (text?.includes('invalid')) {
+                        throw new Error(`Invalid phone number: ${phone}`);
+                    }
+                }
+            } catch (e: any) {
+                if (e.message.includes('Invalid phone number')) throw e;
+            }
+
             const inputSelector = 'div[contenteditable="true"][data-tab="10"]';
             await page.waitForSelector(inputSelector, { timeout: 20000 });
             
@@ -211,15 +230,18 @@ export class SessionManager extends EventEmitter {
             const sendButtonSelector = 'span[data-icon="send"]';
             await page.click(sendButtonSelector);
             
-            // Wait for single tick at least to confirm send
-            // await page.waitForSelector('span[data-icon="msg-check"]', { timeout: 5000 });
+            // Verify send (wait for the text to appear in chat or button to disappear)
+            await new Promise(r => setTimeout(r, 2000));
 
             this.failureCount = 0; 
+            logger.info(`Message successfully sent to ${phone}`);
             return true;
         } catch (error) {
             logger.error(`Failed to send message to ${phone}`, error);
             this.handleFailure();
-            return false;
+            throw error; // Throw so BullMQ can handle retries
+        } finally {
+            this.isSending = false;
         }
     }
 

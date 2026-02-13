@@ -81,8 +81,8 @@ export class JobQueue {
             const delay = Math.floor(Math.random() * 3000) + 2000;
             await new Promise(r => setTimeout(r, delay));
 
-            // Behavioral Entropy: "Coffee Break" (5% chance of long pause)
-            if (Math.random() < 0.05) {
+            // Behavioral Entropy: "Coffee Break" (Reduced to 0.1% for testing)
+            if (Math.random() < 0.001) {
                 const coffeeBreak = Math.floor(Math.random() * 180000) + 120000; // 2-5 minutes
                 logger.info(`Behavioral Entropy: Taking a coffee break for ${coffeeBreak/1000}s...`);
                 await new Promise(r => setTimeout(r, coffeeBreak));
