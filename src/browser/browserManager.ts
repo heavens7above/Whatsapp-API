@@ -35,9 +35,15 @@ export class BrowserManager extends EventEmitter {
         logger.info(`Creating user data directory: ${this.userDataDir}`);
         fs.mkdirSync(this.userDataDir, { recursive: true });
       }
+      
+      // Critical check: Verify we have write permissions by trying to create a test file
+      const testFile = path.join(this.userDataDir, ".write-test");
+      fs.writeFileSync(testFile, Date.now().toString());
+      fs.unlinkSync(testFile);
+      
     } catch (error: any) {
       if (error.code === 'EACCES') {
-        logger.warn(`Permission denied on ${this.userDataDir}. Falling back to /tmp/chrome-data for this session.`);
+        logger.warn(`Permission denied on ${this.userDataDir} (Volume mount issue?). Falling back to /tmp/chrome-data.`);
         this.userDataDir = path.resolve("/tmp/chrome-data");
         this.lockFilePath = path.join(this.userDataDir, ".browser.lock");
         if (!fs.existsSync(this.userDataDir)) {
@@ -51,8 +57,9 @@ export class BrowserManager extends EventEmitter {
     // Check and cleanup stale lock
     await this.cleanupStaleLock();
 
-    // Kill any ghost Chrome processes using this userDataDir
+    // Aggressively kill ghost Chrome processes and clean Chromium lock files
     await this.killGhostBrowsers();
+    this.cleanupChromiumInternalLocks();
 
     logger.info(
       `Initializing browser (Stealth) with user-data-dir: ${this.userDataDir}`,
@@ -259,8 +266,6 @@ export class BrowserManager extends EventEmitter {
     try {
       // Platform-specific cleanup
       if (process.platform === "darwin" || process.platform === "linux") {
-        // Find Chrome processes using our userDataDir
-        const escapedPath = this.userDataDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         try {
           execSync(
             `pkill -f "chrome" || pkill -f "chromium" || true`,
@@ -274,5 +279,38 @@ export class BrowserManager extends EventEmitter {
     } catch (error) {
       logger.warn("Error killing ghost browsers", error);
     }
+  }
+
+  // Aggressively remove Chromium's own lock files which often cause the "Already running" error
+  private cleanupChromiumInternalLocks(): void {
+    const internalLocks = [
+      "SingletonLock",
+      "SingletonCookie",
+      "SingletonSocket",
+      "lock"
+    ];
+
+    internalLocks.forEach(lock => {
+      const lockPath = path.join(this.userDataDir, lock);
+      if (fs.existsSync(lockPath)) {
+        try {
+          fs.unlinkSync(lockPath);
+          logger.info(`Cleaned up internal Chromium lock: ${lock}`);
+        } catch (e) {
+          // Ignore errors
+        }
+      }
+      
+      // Check in Default subdirectory too
+      const defaultLockPath = path.join(this.userDataDir, "Default", lock);
+      if (fs.existsSync(defaultLockPath)) {
+        try {
+          fs.unlinkSync(defaultLockPath);
+          logger.info(`Cleaned up internal Chromium lock in Default: ${lock}`);
+        } catch (e) {
+          // Ignore
+        }
+      }
+    });
   }
 }
