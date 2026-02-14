@@ -33,8 +33,8 @@ This service is not a simple script; it is a **Queue-Worker Microservice**.
 
 1.  **Clone & Install**
     ```bash
-    git clone <repo_url>
-    cd whatsapp-automation-service
+    git clone heavens7above/Whatsapp-API
+    cd Whatsapp-API
     npm install
     ```
 2.  **Configure Environment**
