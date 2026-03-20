@@ -309,30 +309,28 @@ export class BrowserManager extends EventEmitter {
       "SingletonLock",
       "SingletonCookie",
       "SingletonSocket",
-      "lock"
+      "lock",
+      "DevToolsActivePort",
     ];
 
-    internalLocks.forEach(lock => {
-      const lockPath = path.join(this.userDataDir, lock);
-      if (fs.existsSync(lockPath)) {
-        try {
-          fs.unlinkSync(lockPath);
-          logger.info(`Cleaned up internal Chromium lock: ${lock}`);
-        } catch (e) {
-          // Ignore errors
-        }
+    const removeLock = (lockPath: string, label: string) => {
+      try {
+        fs.lstatSync(lockPath);
+      } catch {
+        return;
       }
-      
-      // Check in Default subdirectory too
-      const defaultLockPath = path.join(this.userDataDir, "Default", lock);
-      if (fs.existsSync(defaultLockPath)) {
-        try {
-          fs.unlinkSync(defaultLockPath);
-          logger.info(`Cleaned up internal Chromium lock in Default: ${lock}`);
-        } catch (e) {
-          // Ignore
-        }
+
+      try {
+        fs.unlinkSync(lockPath);
+        logger.info(`Cleaned up internal Chromium lock: ${label}`);
+      } catch (error) {
+        logger.warn(`Failed to remove Chromium lock: ${label}`, error);
       }
+    };
+
+    internalLocks.forEach((lock) => {
+      removeLock(path.join(this.userDataDir, lock), lock);
+      removeLock(path.join(this.userDataDir, "Default", lock), `Default/${lock}`);
     });
   }
 }
