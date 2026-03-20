@@ -34,6 +34,8 @@ RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
 
 WORKDIR /app
 
+ENV CHROME_USER_DATA_DIR=/app/chrome-data
+
 # Copy built artifacts and production dependencies
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package*.json ./

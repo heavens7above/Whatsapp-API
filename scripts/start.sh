@@ -6,10 +6,16 @@ set -e
 
 USER_ID=${PUID:-1000}
 GROUP_ID=${PGID:-1000}
+: "${CHROME_USER_DATA_DIR:=/app/chrome-data}"
 
 echo "Starting initialization script..."
 
 # Ensure the data directory exists
+if [ -z "$CHROME_USER_DATA_DIR" ]; then
+    echo "CHROME_USER_DATA_DIR resolved to an empty path. Refusing to start."
+    exit 1
+fi
+
 mkdir -p "$CHROME_USER_DATA_DIR"
 
 # Fix permissions for the mounted volume
