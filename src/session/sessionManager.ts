@@ -23,6 +23,10 @@ export class SessionManager extends EventEmitter {
     private qrCode: string | null = null;
     private isSending = false;
     
+    // Intervals
+    private heartbeatInterval: NodeJS.Timeout | null = null;
+    private monitorInterval: NodeJS.Timeout | null = null;
+    
     // Circuit Breaker Stats
     private failureCount = 0;
     private lastFailureTime = 0;
@@ -54,10 +58,15 @@ export class SessionManager extends EventEmitter {
     }
 
     private startHeartbeat(page: Page) {
-        setInterval(async () => {
+        if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+        
+        this.heartbeatInterval = setInterval(async () => {
             if ([SessionState.BANNED, SessionState.DISCONNECTED].includes(this.state)) return;
             try {
-                await page.evaluate('1');
+                // Ensure page isn't closed before evaluating
+                if (!page.isClosed()) {
+                    await page.evaluate('1');
+                }
             } catch (err) {
                 logger.error('Browser Heartbeat Failed! Restarting...', err);
                 this.emit('restart_required');
@@ -146,7 +155,9 @@ export class SessionManager extends EventEmitter {
             } catch (e) { /* ignore */ }
         };
 
-        const monitorInterval = setInterval(async () => {
+        if (this.monitorInterval) clearInterval(this.monitorInterval);
+
+        this.monitorInterval = setInterval(async () => {
             if (this.state === SessionState.BANNED || this.state === SessionState.SUSPECTED_BAN) return;
 
             // Circuit Breaker logic
@@ -155,7 +166,7 @@ export class SessionManager extends EventEmitter {
                     logger.info('Circuit Breaker resetting...');
                     this.state = SessionState.RECONNECTING;
                     this.failureCount = 0;
-                    await page.reload();
+                    try { if (!page.isClosed()) await page.reload(); } catch(e) {}
                 }
                 return;
             }
@@ -164,11 +175,13 @@ export class SessionManager extends EventEmitter {
                  // Skip monitor if we are actively sending a message (navigation hides pane)
                  if (this.isSending) return;
 
-                 const isAuth = await page.$('#pane-side');
-                 if (!isAuth) {
-                     this.state = SessionState.DISCONNECTED;
-                     logger.warn('Session disconnected!');
-                 }
+                 try {
+                     const isAuth = !page.isClosed() && await page.$('#pane-side');
+                     if (!isAuth) {
+                         this.state = SessionState.DISCONNECTED;
+                         logger.warn('Session disconnected!');
+                     }
+                 } catch(e) {}
             } else {
                 await checkQR();
                 await checkAuth();
@@ -212,7 +225,7 @@ export class SessionManager extends EventEmitter {
                  timeout: 35000
             }).catch(e => logger.debug(`Navigation notice: ${e.message}`));
             
-            const inputSelector = 'div[contenteditable="true"][data-tab="10"]';
+            const inputSelector = 'div[contenteditable="true"][data-tab="10"], div#main footer div[contenteditable="true"]';
             const invalidSelector = 'div[data-animate-modal-popup="true"]';
 
             // Wait for either the INPUT or the INVALID POPUP
