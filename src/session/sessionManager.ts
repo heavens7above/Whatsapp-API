@@ -55,7 +55,7 @@ export class SessionManager extends EventEmitter {
 
     private startHeartbeat(page: Page) {
         setInterval(async () => {
-            if (this.state === SessionState.BANNED || this.state === SessionState.DISCONNECTED) return;
+            if ([SessionState.BANNED, SessionState.DISCONNECTED].includes(this.state)) return;
             try {
                 await page.evaluate('1');
             } catch (err) {
@@ -185,7 +185,7 @@ export class SessionManager extends EventEmitter {
         return {
             state: this.state,
             // SECURITY: Never return raw QR here anymore!
-            qrAvailable: !!this.qrCode
+            qrAvailable: Boolean(this.qrCode)
         };
     }
 
