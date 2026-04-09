@@ -38,9 +38,9 @@ This service is not a simple script; it is a **Queue-Worker Microservice**.
     npm install
     ```
 2.  **Configure Environment**
-    Copy `.env_example` to `.env` and fill in credentials:
+    Copy `.env.example` to `.env` and fill in credentials:
     ```bash
-    cp .env_example .env
+    cp .env.example .env
     ```
 3.  **Start Redis**
     Ensure a local Redis instance is running on port 6379.

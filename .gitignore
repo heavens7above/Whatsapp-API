@@ -9,7 +9,9 @@ build/
 .env
 .env.local
 .env.production
+# .env.example is intentionally committed (template only)
 dump.rdb
+*.rdb
 
 # Logs
 logs/
@@ -35,3 +37,7 @@ Thumbs.db
 *.spec.js
 *.test.js
 coverage/
+
+# Misc
+*.log
+.cache/
