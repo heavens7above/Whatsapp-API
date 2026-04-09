@@ -1,8 +1,10 @@
 // src/session/sessionManager.ts
 import { Page } from 'puppeteer';
 import { BrowserManager } from '../browser/browserManager';
-import logger from '../utils/logger';
+import { createChildLogger } from '../utils/logger';
 import { EventEmitter } from 'events';
+
+const logger = createChildLogger('session');
 
 export enum SessionState {
     INIT = 'INIT',

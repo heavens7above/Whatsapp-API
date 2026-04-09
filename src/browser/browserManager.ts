@@ -2,8 +2,10 @@
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { Browser, Page } from "puppeteer";
-import logger from "../utils/logger";
+import { createChildLogger } from "../utils/logger";
 import { EventEmitter } from "events";
+
+const logger = createChildLogger("browser");
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";

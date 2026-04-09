@@ -1,7 +1,9 @@
 // src/queue/jobQueue.ts
 import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
-import logger from '../utils/logger';
+import { createChildLogger } from '../utils/logger';
+
+const logger = createChildLogger('queue');
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 

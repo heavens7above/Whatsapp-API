@@ -6,8 +6,11 @@ import rateLimit from 'express-rate-limit';
 import { authMiddleware, verifyHmacSignature, adminMiddleware } from './middleware';
 import { SessionManager } from '../session/sessionManager';
 import { JobQueue } from '../queue/jobQueue';
-import logger from '../utils/logger';
+import { createChildLogger } from '../utils/logger';
+import httpLogger from '../utils/httpLogger';
 import crypto from 'crypto';
+
+const logger = createChildLogger('api');
 
 export const createServer = (sessionManager: SessionManager, jobQueue: JobQueue) => {
     const app = express();
@@ -28,6 +31,9 @@ export const createServer = (sessionManager: SessionManager, jobQueue: JobQueue)
     app.use(helmet());
     app.use(cors());
     app.use(express.json());
+
+    // HTTP Request Logging (Morgan → Winston)
+    app.use(httpLogger);
 
     // Rate Limiting - ensure this is created AFTER trust proxy is set
     const limiter = rateLimit({

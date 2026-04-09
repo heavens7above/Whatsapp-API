@@ -1,7 +1,9 @@
 // src/api/middleware.ts
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
-import logger from '../utils/logger';
+import { createChildLogger } from '../utils/logger';
+
+const logger = createChildLogger('middleware');
 
 // HMAC Signature Validation
 export const verifyHmacSignature = (req: Request, res: Response, next: NextFunction) => {
