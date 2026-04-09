@@ -1,0 +1,11 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Ensure Railway restarts the container if it crashes (fail-closed resilience)
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+# Do not sleep the container, as it needs to maintain the WhatsApp session
+sleepData = false

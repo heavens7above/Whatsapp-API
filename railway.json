@@ -1,0 +1,37 @@
+{
+  "$schema": "https://docs.railway.app/templates/schema.json",
+  "name": "Hardened WhatsApp Automation",
+  "description": "Highly resilient, queue-backed WhatsApp Web Automation interface via Express API.",
+  "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/512px-WhatsApp.svg.png",
+  "services": {
+    "whatsapp-api": {
+      "builder": "DOCKERFILE",
+      "icon": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/512px-WhatsApp.svg.png",
+      "variables": {
+        "PORT": "3000",
+        "API_KEY": {
+          "description": "Secure string used to authenticate API requests via x-api-key header.",
+          "generate": "NANOID"
+        },
+        "API_SECRET": {
+          "description": "Secret for HMAC signatures.",
+          "generate": "NANOID"
+        },
+        "ADMIN_KEY": {
+          "description": "Used to fetch QR access tokens via x-admin-key header.",
+          "generate": "NANOID"
+        },
+        "LOG_LEVEL": "info",
+        "REDIS_URL": "${{Redis.REDIS_URL}}"
+      },
+      "volumes": {
+        "whatsapp-data": "/app/chrome-data"
+      }
+    },
+    "Redis": {
+      "image": "redis:7-alpine",
+      "variables": {}
+    }
+  },
+  "defaultEnvironmentName": "production"
+}
