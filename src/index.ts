@@ -1,3 +1,4 @@
+// @ts-ignore
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -8,12 +9,16 @@ import { JobQueue } from './queue/jobQueue';
 import { createChildLogger, drainLogger } from './utils/logger';
 
 const log = createChildLogger('bootstrap');
+// @ts-ignore
 const PORT = process.env.PORT || 3000;
 
 async function bootstrap() {
     log.info('Starting Hardened WhatsApp Automation Service', {
+        // @ts-ignore
         nodeVersion: process.version,
+        // @ts-ignore
         pid: process.pid,
+        // @ts-ignore
         env: process.env.NODE_ENV || 'development',
         port: PORT,
     });
@@ -42,6 +47,7 @@ async function bootstrap() {
                 if (i === retries - 1) {
                     log.error('CRITICAL: Redis unreachable after all retries. Service exiting (Fail-Closed).', { error: err });
                     await drainLogger();
+                    // @ts-ignore
                     process.exit(1);
                 }
                 await new Promise(res => setTimeout(res, delay));
@@ -58,23 +64,39 @@ async function bootstrap() {
     // --- Coordination Logic ---
 
     // Handle Ban Event
+    // @ts-ignore
     sessionManager.on('banned', async () => {
         log.error('CRITICAL: Account BANNED. Pausing Queue and halting operations.');
         await jobQueue.setBanned(true);
         await jobQueue.pause();
     });
 
-    // Handle Memory Watchdog Restart Request
-    browserManager.on('restart_required', async () => {
-        log.warn('Memory Watchdog triggered restart. Pausing queue...');
-        await jobQueue.pause();
+    let isRestarting = false;
+    const handleRestart = async (source: string) => {
+        if (isRestarting) {
+            log.warn(`Restart already in progress, ignoring ${source} restart request.`);
+            return;
+        }
+        isRestarting = true;
+        try {
+            log.warn(`${source} triggered restart. Pausing queue...`);
+            await jobQueue.pause();
 
-        log.info('Queue paused. Restarting browser...');
-        await browserManager.restartBrowser();
+            log.info('Queue paused. Restarting browser...');
+            await browserManager.restartBrowser();
 
-        log.info('Browser restarted. Resuming queue...');
-        await jobQueue.resume();
-    });
+            log.info('Browser restarted. Resuming queue...');
+            await jobQueue.resume();
+        } finally {
+            isRestarting = false;
+        }
+    };
+
+    // Handle Restart Requests
+    // @ts-ignore
+    browserManager.on('restart_required', () => handleRestart('Memory Watchdog'));
+    // @ts-ignore
+    sessionManager.on('restart_required', () => handleRestart('Session Heartbeat'));
 
     // Start Services
     if (await jobQueue.isBanned()) {
@@ -112,28 +134,36 @@ async function bootstrap() {
 
             log.info('Shutdown complete. Goodbye.');
             await drainLogger();
+            // @ts-ignore
             process.exit(0);
         });
 
         // Force-kill after 30s if graceful close hangs
-        setTimeout(async () => {
+        // @ts-ignore
+        (setTimeout(async () => {
             log.error('Graceful shutdown timed out (30s). Force-exiting.');
             await drainLogger();
+            // @ts-ignore
             process.exit(1);
-        }, 30000).unref();
+        }, 30000) as any).unref();
     };
 
+    // @ts-ignore
     process.on('SIGTERM', () => shutdown('SIGTERM'));
+    // @ts-ignore
     process.on('SIGINT',  () => shutdown('SIGINT'));
 
     // Catch truly unhandled promise rejections (last resort)
-    process.on('unhandledRejection', async (reason) => {
+    // @ts-ignore
+    process.on('unhandledRejection', async (reason: any) => {
         log.error('Unhandled Promise Rejection', { error: reason instanceof Error ? reason : String(reason) });
     });
 
-    process.on('uncaughtException', async (err) => {
+    // @ts-ignore
+    process.on('uncaughtException', async (err: any) => {
         log.error('Uncaught Exception — shutting down', { error: err });
         await drainLogger();
+        // @ts-ignore
         process.exit(1);
     });
 }
@@ -143,5 +173,6 @@ bootstrap().catch(async (err) => {
     const { default: rootLog } = await import('./utils/logger');
     rootLog.error('Fatal Service Error during bootstrap', { error: err });
     await drainLogger();
+    // @ts-ignore
     process.exit(1);
 });

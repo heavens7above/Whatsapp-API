@@ -80,6 +80,7 @@ export class BrowserManager extends EventEmitter {
     try {
       const launchOptions: any = {
         headless: true,
+        protocolTimeout: 300000,
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
@@ -127,7 +128,7 @@ export class BrowserManager extends EventEmitter {
 
       // Resource Efficiency: Block unnecessary resources
       await this.page.setRequestInterception(true);
-      this.page.on("request", (req) => {
+      this.page.on("request", (req: any) => {
         const resourceType = req.resourceType();
         if (
           ["image", "stylesheet", "font", "media", "other"].includes(resourceType)
